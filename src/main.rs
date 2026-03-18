@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "discovery-skills")]
 #[command(about = "CLI tool for managing Claude Code custom skills")]
+#[command(long_about = "Discover, install, and manage custom skills for Claude Code.\n\nSkills are fetched from the discovery-skills-registry and installed\ninto ~/.claude/skills so that Claude Code can use them automatically.")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -18,19 +19,19 @@ struct Cli {
 enum Commands {
     /// Install a skill from the registry
     Install {
-        /// Name of the skill to install (installs all if omitted)
+        /// Skill name to install (omit to install all available skills)
         name: Option<String>,
     },
     /// Uninstall a previously installed skill
     Uninstall {
-        /// Name of the skill to uninstall (uninstalls all if omitted)
+        /// Skill name to uninstall (omit to uninstall all)
         name: Option<String>,
     },
-    /// List installed skills
+    /// List installed skills and their versions
     List,
-    /// Update installed skills
+    /// Update installed skills to the latest version
     Update {
-        /// Name of a specific skill to update (updates all if omitted)
+        /// Skill name to update (omit to update all installed skills)
         name: Option<String>,
     },
 }
