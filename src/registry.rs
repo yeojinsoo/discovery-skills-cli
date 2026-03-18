@@ -53,7 +53,11 @@ pub struct SkillInfo {
 /// Fetch the registry index from the remote GitHub raw URL and parse it.
 pub fn fetch_registry() -> Result<Registry, Box<dyn std::error::Error>> {
     let url = config::registry_raw_url();
-    let body = reqwest::blocking::get(&url)?.text()?;
+    let response = reqwest::blocking::get(&url)?;
+    if !response.status().is_success() {
+        return Err(format!("Failed to fetch registry: HTTP {}", response.status()).into());
+    }
+    let body = response.text()?;
     let registry: Registry = toml::from_str(&body)?;
     Ok(registry)
 }

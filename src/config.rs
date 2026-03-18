@@ -34,10 +34,11 @@ pub fn registry_raw_url() -> String {
 
 /// Construct the GitHub Releases download URL for a specific skill version.
 ///
-/// Pattern: `https://github.com/{REPO}/releases/download/{name}-v{version}/{name}-v{version}.tar.gz`
+/// Pattern: `https://github.com/{REPO}/releases/download/{name}-v{version}/{name}-{version}.tar.gz`
+/// Note: tag uses v-prefix but asset filename does not.
 pub fn release_download_url(skill_name: &str, version: &str) -> String {
     format!(
-        "https://github.com/{}/releases/download/{}-v{}/{}-v{}.tar.gz",
+        "https://github.com/{}/releases/download/{}-v{}/{}-{}.tar.gz",
         REGISTRY_REPO, skill_name, version, skill_name, version
     )
 }
@@ -60,7 +61,7 @@ mod tests {
         let url = release_download_url("logical-analysis", "1.0.0");
         assert_eq!(
             url,
-            "https://github.com/yeojinsoo/discovery-skills-registry/releases/download/logical-analysis-v1.0.0/logical-analysis-v1.0.0.tar.gz"
+            "https://github.com/yeojinsoo/discovery-skills-registry/releases/download/logical-analysis-v1.0.0/logical-analysis-1.0.0.tar.gz"
         );
     }
 
