@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 mod commands;
 mod config;
 mod lockfile;
@@ -20,13 +18,13 @@ struct Cli {
 enum Commands {
     /// Install a skill from the registry
     Install {
-        /// Name of the skill to install
-        name: String,
+        /// Name of the skill to install (installs all if omitted)
+        name: Option<String>,
     },
     /// Uninstall a previously installed skill
     Uninstall {
-        /// Name of the skill to uninstall
-        name: String,
+        /// Name of the skill to uninstall (uninstalls all if omitted)
+        name: Option<String>,
     },
     /// List installed skills
     List,
@@ -40,10 +38,15 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Install { name } => commands::install::run(&name),
-        Commands::Uninstall { name } => commands::uninstall::run(&name),
+    let result = match cli.command {
+        Commands::Install { name } => commands::install::run(name.as_deref()),
+        Commands::Uninstall { name } => commands::uninstall::run(name.as_deref()),
         Commands::List => commands::list::run(),
         Commands::Update { name } => commands::update::run(name.as_deref()),
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
 }
