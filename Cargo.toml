@@ -3,6 +3,7 @@ name = "discovery-skills"
 version = "0.1.0"
 edition = "2021"
 description = "CLI tool for managing Claude Code custom skills"
+repository = "https://github.com/yeojinsoo/discovery-skills-cli"
 license = "MIT"
 
 [dependencies]
@@ -18,3 +19,8 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
