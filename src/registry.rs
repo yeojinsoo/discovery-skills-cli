@@ -96,6 +96,7 @@ pub fn find_skill(registry: &Registry, name: &str) -> Option<SkillInfo> {
 /// extract into `target_dir/{name}/`.
 ///
 /// The archive is expected to be a `.tar.gz` containing the skill files.
+// TODO: Add sha256 checksum verification when registry.toml supports it
 pub fn download_skill(
     name: &str,
     version: &str,
@@ -115,6 +116,12 @@ pub fn download_skill(
     }
 
     let bytes = response.bytes()?;
+    println!(
+        "  Downloaded '{}' v{} ({} bytes)",
+        name,
+        version,
+        bytes.len()
+    );
 
     // Decompress gzip → tar
     let gz_decoder = flate2::read::GzDecoder::new(bytes.as_ref());
