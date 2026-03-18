@@ -1,29 +1,210 @@
+use std::collections::HashMap;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
-/// Metadata for a single skill in the registry.
+use crate::config;
+
+// ---------------------------------------------------------------------------
+// Data structures matching registry.toml layout
+// ---------------------------------------------------------------------------
+
+/// Top-level registry structure parsed from registry.toml.
+///
+/// ```toml
+/// [metadata]
+/// repo = "yeojinsoo/discovery-skills-registry"
+///
+/// [skills.logical-analysis]
+/// version = "1.0.0"
+/// description = "..."
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Registry {
+    pub metadata: RegistryMetadata,
+    pub skills: HashMap<String, SkillEntry>,
+}
+
+/// Metadata section of the registry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryMetadata {
+    pub repo: String,
+}
+
+/// A single skill entry inside `[skills.<name>]`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillEntry {
+    pub version: String,
+    pub description: String,
+}
+
+/// Flattened skill info returned to callers (name is the map key).
+#[derive(Debug, Clone)]
 pub struct SkillInfo {
     pub name: String,
     pub version: String,
     pub description: String,
-    pub author: String,
 }
 
-/// Represents the registry index containing all available skills.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Registry {
-    pub skills: Vec<SkillInfo>,
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/// Fetch the registry index from the remote GitHub raw URL and parse it.
+pub fn fetch_registry() -> Result<Registry, Box<dyn std::error::Error>> {
+    let url = config::registry_raw_url();
+    let body = reqwest::blocking::get(&url)?.text()?;
+    let registry: Registry = toml::from_str(&body)?;
+    Ok(registry)
 }
 
-impl Registry {
-    /// Fetch the registry index from the remote repository.
-    pub fn fetch() -> Result<Self, Box<dyn std::error::Error>> {
-        // TODO: Implement in S4
-        todo!("Registry::fetch not yet implemented")
+/// Parse a registry from a TOML string (useful for testing).
+pub fn parse_registry(toml_str: &str) -> Result<Registry, Box<dyn std::error::Error>> {
+    let registry: Registry = toml::from_str(toml_str)?;
+    Ok(registry)
+}
+
+/// Return a sorted list of all available skills in the registry.
+pub fn list_available_skills(registry: &Registry) -> Vec<SkillInfo> {
+    let mut skills: Vec<SkillInfo> = registry
+        .skills
+        .iter()
+        .map(|(name, entry)| SkillInfo {
+            name: name.clone(),
+            version: entry.version.clone(),
+            description: entry.description.clone(),
+        })
+        .collect();
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
+    skills
+}
+
+/// Find a specific skill by name.
+pub fn find_skill(registry: &Registry, name: &str) -> Option<SkillInfo> {
+    registry.skills.get(name).map(|entry| SkillInfo {
+        name: name.to_string(),
+        version: entry.version.clone(),
+        description: entry.description.clone(),
+    })
+}
+
+/// Download a skill release archive from GitHub Releases, decompress, and
+/// extract into `target_dir/{name}/`.
+///
+/// The archive is expected to be a `.tar.gz` containing the skill files.
+pub fn download_skill(
+    name: &str,
+    version: &str,
+    target_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let url = config::release_download_url(name, version);
+
+    let response = reqwest::blocking::get(&url)?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to download skill '{}' v{}: HTTP {}",
+            name,
+            version,
+            response.status()
+        )
+        .into());
     }
 
-    /// Find a skill by name in the registry.
-    pub fn find_skill(&self, name: &str) -> Option<&SkillInfo> {
-        self.skills.iter().find(|s| s.name == name)
+    let bytes = response.bytes()?;
+
+    // Decompress gzip → tar
+    let gz_decoder = flate2::read::GzDecoder::new(bytes.as_ref());
+    let mut archive = tar::Archive::new(gz_decoder);
+
+    let dest = target_dir.join(name);
+    std::fs::create_dir_all(&dest)?;
+
+    archive.unpack(&dest)?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_TOML: &str = r#"
+[metadata]
+repo = "yeojinsoo/discovery-skills-registry"
+
+[skills.logical-analysis]
+version = "1.0.0"
+description = "Logical analysis skill"
+
+[skills.project-planner]
+version = "2.0.0"
+description = "Project planning skill"
+"#;
+
+    #[test]
+    fn test_parse_registry() {
+        let registry = parse_registry(SAMPLE_TOML).expect("Failed to parse TOML");
+
+        // metadata
+        assert_eq!(registry.metadata.repo, "yeojinsoo/discovery-skills-registry");
+
+        // skills count
+        assert_eq!(registry.skills.len(), 2);
+
+        // individual skill
+        let la = registry.skills.get("logical-analysis").unwrap();
+        assert_eq!(la.version, "1.0.0");
+        assert_eq!(la.description, "Logical analysis skill");
+
+        let pp = registry.skills.get("project-planner").unwrap();
+        assert_eq!(pp.version, "2.0.0");
+        assert_eq!(pp.description, "Project planning skill");
+    }
+
+    #[test]
+    fn test_list_available_skills() {
+        let registry = parse_registry(SAMPLE_TOML).unwrap();
+        let skills = list_available_skills(&registry);
+
+        assert_eq!(skills.len(), 2);
+        // sorted alphabetically
+        assert_eq!(skills[0].name, "logical-analysis");
+        assert_eq!(skills[1].name, "project-planner");
+    }
+
+    #[test]
+    fn test_find_skill_exists() {
+        let registry = parse_registry(SAMPLE_TOML).unwrap();
+
+        let found = find_skill(&registry, "logical-analysis");
+        assert!(found.is_some());
+        let info = found.unwrap();
+        assert_eq!(info.name, "logical-analysis");
+        assert_eq!(info.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_find_skill_not_exists() {
+        let registry = parse_registry(SAMPLE_TOML).unwrap();
+        let found = find_skill(&registry, "nonexistent-skill");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    #[ignore] // Requires network access
+    fn test_fetch_registry() {
+        let registry = fetch_registry().expect("Failed to fetch registry from GitHub");
+
+        // Basic structural assertions
+        assert_eq!(registry.metadata.repo, "yeojinsoo/discovery-skills-registry");
+        assert!(!registry.skills.is_empty(), "Registry should have at least one skill");
+
+        // We know logical-analysis exists in the real registry
+        let la = registry.skills.get("logical-analysis");
+        assert!(la.is_some(), "logical-analysis should exist in registry");
     }
 }
