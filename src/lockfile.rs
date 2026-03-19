@@ -154,7 +154,7 @@ mod tests {
 
         let mut lockfile = Lockfile::default();
         lockfile.add_skill("logical-analysis", "1.2.0", vec![]);
-        lockfile.add_skill("project-planner", "0.9.1", vec![]);
+        lockfile.add_skill("spec-agent", "0.9.1", vec![]);
         assert_eq!(lockfile.skills.len(), 2);
 
         lockfile.save(&path).expect("save should succeed");
@@ -165,8 +165,8 @@ mod tests {
         let la = reloaded.get_skill("logical-analysis").expect("should exist");
         assert_eq!(la.version, "1.2.0");
 
-        let pp = reloaded.get_skill("project-planner").expect("should exist");
-        assert_eq!(pp.version, "0.9.1");
+        let sa = reloaded.get_skill("spec-agent").expect("should exist");
+        assert_eq!(sa.version, "0.9.1");
 
         cleanup(&path);
     }

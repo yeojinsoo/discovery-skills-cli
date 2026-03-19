@@ -217,9 +217,9 @@ repo = "yeojinsoo/discovery-skills-registry"
 version = "1.0.0"
 description = "Logical analysis skill"
 
-[skills.project-planner]
-version = "2.0.0"
-description = "Project planning skill"
+[skills.spec-agent]
+version = "0.1.0"
+description = "Spec agent skill"
 "#;
 
     #[test]
@@ -237,9 +237,9 @@ description = "Project planning skill"
         assert_eq!(la.version, "1.0.0");
         assert_eq!(la.description, "Logical analysis skill");
 
-        let pp = registry.skills.get("project-planner").unwrap();
-        assert_eq!(pp.version, "2.0.0");
-        assert_eq!(pp.description, "Project planning skill");
+        let sa = registry.skills.get("spec-agent").unwrap();
+        assert_eq!(sa.version, "0.1.0");
+        assert_eq!(sa.description, "Spec agent skill");
     }
 
     #[test]
@@ -250,7 +250,7 @@ description = "Project planning skill"
         assert_eq!(skills.len(), 2);
         // sorted alphabetically
         assert_eq!(skills[0].name, "logical-analysis");
-        assert_eq!(skills[1].name, "project-planner");
+        assert_eq!(skills[1].name, "spec-agent");
     }
 
     #[test]
