@@ -7,7 +7,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let lockfile = Lockfile::load(&lockfile_path)?;
 
     if lockfile.skills.is_empty() {
-        println!("No skills are installed.");
+        println!("설치된 스킬이 없습니다.");
         return Ok(());
     }
 
@@ -22,14 +22,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(|(n, _)| n.len())
         .max()
         .unwrap_or(4)
-        .max(4); // "Name"
+        .max(4); // "이름"
     let version_width = entries
         .iter()
         .map(|(_, s)| s.version.len())
         .max()
         .unwrap_or(7)
-        .max(7); // "Version"
-    let date_header = "Installed At";
+        .max(4); // "버전"
+    let date_header = "설치 일시";
     let date_width = entries
         .iter()
         .map(|(_, s)| s.installed_at.len())
@@ -40,9 +40,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Print header
     println!(
         "{:<name_w$}  {:<ver_w$}  {:<date_w$}",
-        "Name",
-        "Version",
-        "Installed At",
+        "이름",
+        "버전",
+        "설치 일시",
         name_w = name_width,
         ver_w = version_width,
         date_w = date_width,
@@ -70,7 +70,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!("\n{} skill(s) installed.", entries.len());
+    println!("\n총 {}개 스킬 설치됨.", entries.len());
 
     Ok(())
 }

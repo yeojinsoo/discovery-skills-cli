@@ -2,11 +2,20 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+/// A dependency record stored in the lockfile for offline dependency resolution.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LockedDependency {
+    pub name: String,
+    pub ref_version: String,
+}
+
 /// Represents a single installed skill entry in the lockfile.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InstalledSkill {
     pub version: String,
     pub installed_at: String, // ISO 8601
+    #[serde(default)]
+    pub depends_on: Vec<LockedDependency>,
 }
 
 /// The lockfile tracks all currently installed skills.
@@ -44,13 +53,14 @@ impl Lockfile {
     }
 
     /// Add or update a skill entry. Sets `installed_at` to the current UTC time (ISO 8601).
-    pub fn add_skill(&mut self, name: &str, version: &str) {
+    pub fn add_skill(&mut self, name: &str, version: &str, depends_on: Vec<LockedDependency>) {
         let now = chrono::Utc::now().to_rfc3339();
         self.skills.insert(
             name.to_string(),
             InstalledSkill {
                 version: version.to_string(),
                 installed_at: now,
+                depends_on,
             },
         );
     }
@@ -96,7 +106,7 @@ mod tests {
         assert!(lockfile.skills.is_empty());
 
         // add
-        lockfile.add_skill("logical-analysis", "1.0.0");
+        lockfile.add_skill("logical-analysis", "1.0.0", vec![]);
         assert_eq!(lockfile.skills.len(), 1);
 
         // get
@@ -143,8 +153,8 @@ mod tests {
         let path = temp_lockfile_path("test_lockfile_save_load");
 
         let mut lockfile = Lockfile::default();
-        lockfile.add_skill("logical-analysis", "1.2.0");
-        lockfile.add_skill("project-planner", "0.9.1");
+        lockfile.add_skill("logical-analysis", "1.2.0", vec![]);
+        lockfile.add_skill("project-planner", "0.9.1", vec![]);
         assert_eq!(lockfile.skills.len(), 2);
 
         lockfile.save(&path).expect("save should succeed");

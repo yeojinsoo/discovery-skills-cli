@@ -31,11 +31,20 @@ pub struct RegistryMetadata {
     pub repo: String,
 }
 
+/// A dependency reference: which skill is required and at what version it was tested.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dependency {
+    pub name: String,
+    pub ref_version: String,
+}
+
 /// A single skill entry inside `[skills.<name>]`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillEntry {
     pub version: String,
     pub description: String,
+    #[serde(default)]
+    pub depends_on: Vec<Dependency>,
 }
 
 /// Flattened skill info returned to callers (name is the map key).
@@ -77,6 +86,7 @@ pub fn list_available_skills(registry: &Registry) -> Vec<SkillInfo> {
             name: name.clone(),
             version: entry.version.clone(),
             description: entry.description.clone(),
+
         })
         .collect();
     skills.sort_by(|a, b| a.name.cmp(&b.name));

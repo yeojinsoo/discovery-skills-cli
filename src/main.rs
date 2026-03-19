@@ -1,7 +1,9 @@
 mod commands;
 mod config;
+mod deps;
 mod lockfile;
 mod registry;
+mod ui;
 
 use clap::{Parser, Subcommand};
 
