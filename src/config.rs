@@ -13,15 +13,15 @@ pub const SKILLS_DIR_NAME: &str = ".claude/skills";
 pub const LOCKFILE_NAME: &str = ".skill-manager.toml";
 
 /// Construct the full path to the skills directory.
-pub fn skills_dir() -> PathBuf {
-    dirs::home_dir()
-        .expect("Could not determine home directory")
-        .join(SKILLS_DIR_NAME)
+pub fn skills_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let home = dirs::home_dir()
+        .ok_or("홈 디렉토리를 찾을 수 없습니다. $HOME 환경변수를 확인하세요.")?;
+    Ok(home.join(SKILLS_DIR_NAME))
 }
 
 /// Construct the full path to the lockfile.
-pub fn lockfile_path() -> PathBuf {
-    skills_dir().join(LOCKFILE_NAME)
+pub fn lockfile_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(skills_dir()?.join(LOCKFILE_NAME))
 }
 
 /// Construct the raw GitHub URL for the registry.toml index file.
@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn test_skills_dir_is_under_home() {
-        let dir = skills_dir();
+        let dir = skills_dir().unwrap();
         let home = dirs::home_dir().unwrap();
         assert!(dir.starts_with(&home));
         assert!(dir.ends_with(".claude/skills"));
@@ -75,8 +75,8 @@ mod tests {
 
     #[test]
     fn test_lockfile_path_is_under_skills_dir() {
-        let lf = lockfile_path();
-        let sd = skills_dir();
+        let lf = lockfile_path().unwrap();
+        let sd = skills_dir().unwrap();
         assert!(lf.starts_with(&sd));
         assert!(lf.ends_with(".skill-manager.toml"));
     }

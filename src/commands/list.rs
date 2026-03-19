@@ -3,7 +3,7 @@ use crate::lockfile::Lockfile;
 
 /// List all currently installed skills in a table format.
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let lockfile_path = config::lockfile_path();
+    let lockfile_path = config::lockfile_path()?;
     let lockfile = Lockfile::load(&lockfile_path)?;
 
     if lockfile.skills.is_empty() {

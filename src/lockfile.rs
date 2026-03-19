@@ -54,7 +54,7 @@ impl Lockfile {
 
     /// Add or update a skill entry. Sets `installed_at` to the current UTC time (ISO 8601).
     pub fn add_skill(&mut self, name: &str, version: &str, depends_on: Vec<LockedDependency>) {
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = humantime::format_rfc3339(std::time::SystemTime::now()).to_string();
         self.skills.insert(
             name.to_string(),
             InstalledSkill {

@@ -7,7 +7,7 @@ use crate::ui;
 /// If `name` is Some, uninstall that specific skill.
 /// If `name` is None, uninstall all installed skills after confirmation.
 pub fn run(name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    let lockfile_path = config::lockfile_path();
+    let lockfile_path = config::lockfile_path()?;
     let mut lockfile = Lockfile::load(&lockfile_path)?;
 
     let targets: Vec<String> = match name {
@@ -62,7 +62,7 @@ pub fn run(name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let skills_dir = config::skills_dir();
+    let skills_dir = config::skills_dir()?;
     let mut removed_count = 0;
 
     for skill_name in &targets {

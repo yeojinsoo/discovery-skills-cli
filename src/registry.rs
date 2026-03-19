@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -56,13 +57,27 @@ pub struct SkillInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Build a reusable HTTP client with connect and response timeouts.
+fn http_client() -> Result<reqwest::blocking::Client, Box<dyn std::error::Error>> {
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build()?;
+    Ok(client)
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /// Fetch the registry index from the remote GitHub raw URL and parse it.
 pub fn fetch_registry() -> Result<Registry, Box<dyn std::error::Error>> {
     let url = config::registry_raw_url();
-    let response = reqwest::blocking::get(&url)?;
+    let client = http_client()?;
+    let response = client.get(&url).send()?;
     if !response.status().is_success() {
         return Err(format!("Failed to fetch registry: HTTP {}", response.status()).into());
     }
@@ -72,6 +87,7 @@ pub fn fetch_registry() -> Result<Registry, Box<dyn std::error::Error>> {
 }
 
 /// Parse a registry from a TOML string (useful for testing).
+#[cfg(test)]
 pub fn parse_registry(toml_str: &str) -> Result<Registry, Box<dyn std::error::Error>> {
     let registry: Registry = toml::from_str(toml_str)?;
     Ok(registry)
@@ -114,7 +130,8 @@ pub fn download_skill(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = config::release_download_url(name, version);
 
-    let response = reqwest::blocking::get(&url)?;
+    let client = http_client()?;
+    let response = client.get(&url).send()?;
     if !response.status().is_success() {
         return Err(format!(
             "Failed to download skill '{}' v{}: HTTP {}",
@@ -143,6 +160,35 @@ pub fn download_skill(
     archive.unpack(&dest)?;
 
     Ok(())
+}
+
+/// Download multiple skills in parallel. Returns a Vec of (name, version, Result).
+///
+/// Each skill is downloaded in its own thread using `std::thread::scope`.
+/// A failure in one download does not affect the others.
+/// The error type is `String` because `Box<dyn Error>` from `download_skill` is not `Send`.
+pub fn download_skills_parallel(
+    skills: &[(&str, &str)],
+    target_dir: &Path,
+) -> Vec<(String, String, Result<(), String>)> {
+    std::thread::scope(|s| {
+        let handles: Vec<_> = skills
+            .iter()
+            .map(|&(name, version)| {
+                let target = target_dir.to_path_buf();
+                s.spawn(move || {
+                    let result = download_skill(name, version, &target);
+                    (
+                        name.to_string(),
+                        version.to_string(),
+                        result.map_err(|e| e.to_string()),
+                    )
+                })
+            })
+            .collect();
+
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    })
 }
 
 // ---------------------------------------------------------------------------
