@@ -19,7 +19,7 @@ pub struct InstalledSkill {
 }
 
 /// The lockfile tracks all currently installed skills.
-/// Stored as `~/.claude/skills/.skill-manager.toml`.
+/// Stored as `~/.discovery-skills/lockfile.toml`.
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Lockfile {
     #[serde(default)]

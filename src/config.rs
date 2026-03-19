@@ -9,8 +9,15 @@ pub const REGISTRY_BRANCH: &str = "main";
 /// Relative directory (from home) where skills are installed.
 pub const SKILLS_DIR_NAME: &str = ".claude/skills";
 
+/// Relative directory (from home) where CLI state is stored.
+/// Separated from SKILLS_DIR to keep the skill runtime directory clean.
+pub const DATA_DIR_NAME: &str = ".discovery-skills";
+
 /// Name of the lockfile that tracks installed skills.
-pub const LOCKFILE_NAME: &str = ".skill-manager.toml";
+pub const LOCKFILE_NAME: &str = "lockfile.toml";
+
+/// Legacy lockfile name (pre-migration).
+pub const LEGACY_LOCKFILE_NAME: &str = ".skill-manager.toml";
 
 /// Construct the full path to the skills directory.
 pub fn skills_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -19,9 +26,21 @@ pub fn skills_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(home.join(SKILLS_DIR_NAME))
 }
 
-/// Construct the full path to the lockfile.
+/// Construct the full path to the CLI data directory (~/.discovery-skills/).
+pub fn data_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let home = dirs::home_dir()
+        .ok_or("홈 디렉토리를 찾을 수 없습니다. $HOME 환경변수를 확인하세요.")?;
+    Ok(home.join(DATA_DIR_NAME))
+}
+
+/// Construct the full path to the lockfile (~/.discovery-skills/lockfile.toml).
 pub fn lockfile_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    Ok(skills_dir()?.join(LOCKFILE_NAME))
+    Ok(data_dir()?.join(LOCKFILE_NAME))
+}
+
+/// Construct the full path to the legacy lockfile (~/.claude/skills/.skill-manager.toml).
+pub fn legacy_lockfile_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(skills_dir()?.join(LEGACY_LOCKFILE_NAME))
 }
 
 /// Construct the raw GitHub URL for the registry.toml index file.
@@ -74,8 +93,24 @@ mod tests {
     }
 
     #[test]
-    fn test_lockfile_path_is_under_skills_dir() {
+    fn test_data_dir_is_under_home() {
+        let dir = data_dir().unwrap();
+        let home = dirs::home_dir().unwrap();
+        assert!(dir.starts_with(&home));
+        assert!(dir.ends_with(".discovery-skills"));
+    }
+
+    #[test]
+    fn test_lockfile_path_is_under_data_dir() {
         let lf = lockfile_path().unwrap();
+        let dd = data_dir().unwrap();
+        assert!(lf.starts_with(&dd));
+        assert!(lf.ends_with("lockfile.toml"));
+    }
+
+    #[test]
+    fn test_legacy_lockfile_path_is_under_skills_dir() {
+        let lf = legacy_lockfile_path().unwrap();
         let sd = skills_dir().unwrap();
         assert!(lf.starts_with(&sd));
         assert!(lf.ends_with(".skill-manager.toml"));

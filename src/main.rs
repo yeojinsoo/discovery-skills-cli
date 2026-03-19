@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "discovery-skills")]
 #[command(about = "CLI tool for managing Claude Code custom skills")]
-#[command(long_about = "Discover, install, and manage custom skills for Claude Code.\n\nSkills are fetched from the discovery-skills-registry and installed\ninto ~/.claude/skills so that Claude Code can use them automatically.")]
+#[command(long_about = "Discover, install, and manage custom skills for Claude Code.\n\nSkills are fetched from the discovery-skills-registry and installed\ninto ~/.claude/skills so that Claude Code can use them automatically.\nCLI state (lockfile) is stored in ~/.discovery-skills/.")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -38,8 +38,54 @@ enum Commands {
     },
 }
 
+/// Migrate the lockfile from the legacy location (~/.claude/skills/.skill-manager.toml)
+/// to the new location (~/.discovery-skills/lockfile.toml).
+fn migrate_lockfile() {
+    let legacy = match config::legacy_lockfile_path() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let new_path = match config::lockfile_path() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    if legacy.exists() && !new_path.exists() {
+        if let Some(parent) = new_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::rename(&legacy, &new_path) {
+            Ok(()) => {
+                eprintln!(
+                    "  Lockfile migrated: {} → {}",
+                    legacy.display(),
+                    new_path.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "  Warning: lockfile migration failed ({}), falling back to copy",
+                    e
+                );
+                if let Ok(content) = std::fs::read(&legacy) {
+                    if std::fs::write(&new_path, &content).is_ok() {
+                        let _ = std::fs::remove_file(&legacy);
+                        eprintln!(
+                            "  Lockfile migrated (copy): {} → {}",
+                            legacy.display(),
+                            new_path.display()
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
+
+    migrate_lockfile();
 
     let result = match cli.command {
         Commands::Install { name } => commands::install::run(name.as_deref()),

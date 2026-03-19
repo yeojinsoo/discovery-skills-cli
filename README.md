@@ -51,13 +51,16 @@ discovery-skills --help
 discovery-skills-registry (GitHub)
   registry.toml ──GET──→ CLI가 최신 버전 확인
   Release tar.gz ──GET──→ ~/.claude/skills/{name}/ 에 설치
-                          ~/.claude/skills/.skill-manager.toml 에 기록
+                          ~/.discovery-skills/lockfile.toml 에 기록
 ```
 
 1. `registry.toml`에서 스킬 목록과 버전 확인
 2. GitHub Release에서 스킬별 `tar.gz` 다운로드
-3. `~/.claude/skills/`에 압축 해제
-4. `.skill-manager.toml`에 설치 정보 기록
+3. `~/.claude/skills/`에 압축 해제 (CHANGELOG.md 등 레지스트리 전용 파일 제외)
+4. `~/.discovery-skills/lockfile.toml`에 설치 정보 기록
+
+> CLI 상태(lockfile)는 `~/.discovery-skills/`에 별도 저장됩니다. 스킬 디렉토리(`~/.claude/skills/`)에는 순수 스킬 파일만 존재합니다.
+> 기존 `~/.claude/skills/.skill-manager.toml` 사용자는 CLI 실행 시 자동 마이그레이션됩니다.
 
 ## Build from Source
 

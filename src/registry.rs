@@ -150,14 +150,24 @@ pub fn download_skill(
         bytes.len()
     );
 
-    // Decompress gzip → tar
+    // Decompress gzip → tar, filtering out registry-only files
     let gz_decoder = flate2::read::GzDecoder::new(bytes.as_ref());
     let mut archive = tar::Archive::new(gz_decoder);
 
     let dest = target_dir.join(name);
     std::fs::create_dir_all(&dest)?;
 
-    archive.unpack(&dest)?;
+    // Skip files that belong to the registry only (e.g., CHANGELOG.md)
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?.into_owned();
+        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+            if file_name == "CHANGELOG.md" {
+                continue;
+            }
+        }
+        entry.unpack_in(&dest)?;
+    }
 
     Ok(())
 }
