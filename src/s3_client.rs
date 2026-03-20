@@ -4,6 +4,17 @@ use std::error::Error;
 // Data types
 // ---------------------------------------------------------------------------
 
+/// Result of a head_bucket check.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HeadBucketResult {
+    /// Bucket exists and is accessible.
+    Ok,
+    /// Bucket does not exist.
+    NotFound,
+    /// Credentials are invalid or lack permission.
+    Forbidden,
+}
+
 /// Metadata returned by head_object.
 #[derive(Debug, Clone)]
 pub struct ObjectMeta {
@@ -27,7 +38,10 @@ pub struct ObjectInfo {
 
 pub trait S3Client {
     /// Check that the configured bucket exists and is accessible.
-    fn head_bucket(&self) -> Result<(), Box<dyn Error>>;
+    fn head_bucket(&self) -> Result<HeadBucketResult, Box<dyn Error>>;
+
+    /// Create the bucket and configure versioning, SSE-S3, and public access block.
+    fn create_and_configure_bucket(&self, region: &str) -> Result<(), Box<dyn Error>>;
 
     /// Upload an object.  `content_md5` is an optional base64-encoded MD5.
     fn put_object(
@@ -57,6 +71,10 @@ pub trait S3Client {
         key: &str,
         body: Vec<u8>,
     ) -> Result<bool, Box<dyn Error>>;
+
+    /// Delete the configured bucket itself (used for rollback on failed configuration).
+    #[allow(dead_code)] // used internally by AwsS3Client rollback; exposed for testing
+    fn delete_bucket(&self) -> Result<(), Box<dyn Error>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,14 +107,106 @@ impl AwsS3Client {
     }
 }
 
+impl AwsS3Client {
+    /// Configure versioning, encryption, and public access block on the bucket.
+    /// Extracted so `create_and_configure_bucket` can rollback on failure.
+    async fn configure_bucket_async(&self) -> Result<(), Box<dyn Error>> {
+        // 2. Enable versioning
+        self.client
+            .put_bucket_versioning()
+            .bucket(&self.bucket)
+            .versioning_configuration(
+                aws_sdk_s3::types::VersioningConfiguration::builder()
+                    .status(aws_sdk_s3::types::BucketVersioningStatus::Enabled)
+                    .build(),
+            )
+            .send()
+            .await?;
+
+        // 3. Enable SSE-S3 default encryption
+        self.client
+            .put_bucket_encryption()
+            .bucket(&self.bucket)
+            .server_side_encryption_configuration(
+                aws_sdk_s3::types::ServerSideEncryptionConfiguration::builder()
+                    .rules(
+                        aws_sdk_s3::types::ServerSideEncryptionRule::builder()
+                            .apply_server_side_encryption_by_default(
+                                aws_sdk_s3::types::ServerSideEncryptionByDefault::builder()
+                                    .sse_algorithm(
+                                        aws_sdk_s3::types::ServerSideEncryption::Aes256,
+                                    )
+                                    .build()?,
+                            )
+                            .build(),
+                    )
+                    .build()?,
+            )
+            .send()
+            .await?;
+
+        // 4. Block public access
+        self.client
+            .put_public_access_block()
+            .bucket(&self.bucket)
+            .public_access_block_configuration(
+                aws_sdk_s3::types::PublicAccessBlockConfiguration::builder()
+                    .block_public_acls(true)
+                    .ignore_public_acls(true)
+                    .block_public_policy(true)
+                    .restrict_public_buckets(true)
+                    .build(),
+            )
+            .send()
+            .await?;
+
+        Ok(())
+    }
+}
+
 impl S3Client for AwsS3Client {
-    fn head_bucket(&self) -> Result<(), Box<dyn Error>> {
+    fn head_bucket(&self) -> Result<HeadBucketResult, Box<dyn Error>> {
         self.rt.block_on(async {
-            self.client
-                .head_bucket()
-                .bucket(&self.bucket)
-                .send()
-                .await?;
+            match self.client.head_bucket().bucket(&self.bucket).send().await {
+                Ok(_) => Ok(HeadBucketResult::Ok),
+                Err(sdk_err) => {
+                    if let aws_sdk_s3::error::SdkError::ServiceError(ref se) = sdk_err {
+                        if se.err().is_not_found() {
+                            return Ok(HeadBucketResult::NotFound);
+                        }
+                        let raw = se.raw();
+                        if raw.status().as_u16() == 403 {
+                            return Ok(HeadBucketResult::Forbidden);
+                        }
+                    }
+                    Err(Box::new(sdk_err) as Box<dyn Error>)
+                }
+            }
+        })
+    }
+
+    fn create_and_configure_bucket(&self, region: &str) -> Result<(), Box<dyn Error>> {
+        self.rt.block_on(async {
+            // 1. CreateBucket — us-east-1 must omit LocationConstraint
+            let mut req = self.client.create_bucket().bucket(&self.bucket);
+            if region != "us-east-1" {
+                req = req.create_bucket_configuration(
+                    aws_sdk_s3::types::CreateBucketConfiguration::builder()
+                        .location_constraint(aws_sdk_s3::types::BucketLocationConstraint::from(
+                            region,
+                        ))
+                        .build(),
+                );
+            }
+            req.send().await?;
+
+            // 2~4. Configure bucket — rollback (delete bucket) on failure
+            if let Err(e) = self.configure_bucket_async().await {
+                eprintln!("버킷 설정 실패. 생성된 버킷을 삭제합니다...");
+                let _ = self.client.delete_bucket().bucket(&self.bucket).send().await;
+                return Err(e);
+            }
+
             Ok(())
         })
     }
@@ -259,6 +369,17 @@ impl S3Client for AwsS3Client {
             }
         })
     }
+
+    fn delete_bucket(&self) -> Result<(), Box<dyn Error>> {
+        self.rt.block_on(async {
+            self.client
+                .delete_bucket()
+                .bucket(&self.bucket)
+                .send()
+                .await?;
+            Ok(())
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +402,11 @@ impl MockS3Client {
 
 #[cfg(test)]
 impl S3Client for MockS3Client {
-    fn head_bucket(&self) -> Result<(), Box<dyn Error>> {
+    fn head_bucket(&self) -> Result<HeadBucketResult, Box<dyn Error>> {
+        Ok(HeadBucketResult::Ok)
+    }
+
+    fn create_and_configure_bucket(&self, _region: &str) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 
@@ -366,6 +491,10 @@ impl S3Client for MockS3Client {
             Ok(true)
         }
     }
+
+    fn delete_bucket(&self) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +508,8 @@ mod tests {
     #[test]
     fn mock_head_bucket() {
         let client = MockS3Client::new();
-        assert!(client.head_bucket().is_ok());
+        let result = client.head_bucket().unwrap();
+        assert_eq!(result, HeadBucketResult::Ok);
     }
 
     #[test]
@@ -458,7 +588,8 @@ mod tests {
     fn trait_object_safety() {
         // Verify S3Client can be used as a trait object
         let client: Box<dyn S3Client> = Box::new(MockS3Client::new());
-        assert!(client.head_bucket().is_ok());
+        let result = client.head_bucket().unwrap();
+        assert_eq!(result, HeadBucketResult::Ok);
     }
 
     #[test]
