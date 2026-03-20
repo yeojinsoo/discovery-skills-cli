@@ -1,6 +1,6 @@
 [package]
 name = "discovery-skills"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "CLI tool for managing Claude Code custom skills"
 repository = "https://github.com/yeojinsoo/discovery-skills-cli"
