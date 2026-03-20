@@ -1,8 +1,12 @@
 mod commands;
 mod config;
 mod deps;
+mod jsonl_merge;
 mod lockfile;
 mod registry;
+mod s3_client;
+mod sync_config;
+mod sync_manifest;
 mod ui;
 
 use clap::{Parser, Subcommand};
@@ -36,6 +40,47 @@ enum Commands {
         /// Skill name to update (omit to update all installed skills)
         name: Option<String>,
     },
+    /// Sync skills to/from cloud storage
+    Sync {
+        #[command(subcommand)]
+        action: SyncAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyncAction {
+    /// Initialize sync configuration for this machine
+    Init {
+        /// S3 bucket name for skill synchronisation
+        #[arg(long)]
+        bucket: Option<String>,
+        /// AWS region of the bucket (e.g. ap-northeast-2)
+        #[arg(long)]
+        region: Option<String>,
+    },
+    /// Push local skills to cloud storage
+    Push {
+        /// Overwrite remote changes without conflict check
+        #[arg(long)]
+        force: bool,
+        /// Suppress output, exit code only
+        #[arg(long)]
+        quiet: bool,
+        /// Only push changed files (default behaviour)
+        #[arg(long)]
+        changed_only: bool,
+    },
+    /// Pull skills from cloud storage to local
+    Pull {
+        /// Overwrite local changes without conflict resolution
+        #[arg(long)]
+        force: bool,
+        /// Suppress output, exit code only
+        #[arg(long)]
+        quiet: bool,
+    },
+    /// Show sync status (local vs remote diff)
+    Status,
 }
 
 /// Migrate the lockfile from the legacy location (~/.claude/skills/.skill-manager.toml)
@@ -92,6 +137,7 @@ fn main() {
         Commands::Uninstall { name } => commands::uninstall::run(name.as_deref()),
         Commands::List => commands::list::run(),
         Commands::Update { name } => commands::update::run(name.as_deref()),
+        Commands::Sync { action } => commands::sync::run(action),
     };
 
     if let Err(e) = result {
